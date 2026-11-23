@@ -76,11 +76,7 @@
         return ws;
       }
     });
-    // Preserve static constants and instanceof behavior.
-    window.WebSocket.prototype = NativeWebSocket.prototype;
-    for (const key of ["CONNECTING", "OPEN", "CLOSING", "CLOSED"]) {
-      try { Object.defineProperty(window.WebSocket, key, { value: NativeWebSocket[key] }); } catch (_) {}
-    }
+    // Proxy inherits the native WebSocket prototype and static constants.
   }
 
   function addPanel() {
