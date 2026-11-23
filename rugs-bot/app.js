@@ -6,7 +6,7 @@ const BUY=[.001,.002,-.006,.004,-.004,.006,.001,.002,.008,-.003];
 const SELL=[-.012,-.015,-.025,-.01,.008,-.018,-.008,-.012,-.02,-.006];
 const SIZE=[.25,.30,.20,.35,.20,.15,.40,.25,.10,.20];
 const $=id=>document.getElementById(id);
-let agents=[],price=1,history=[],tick=0,active=false,botRunning=false,trades=[],market=[],rounds=[],lastState=null,lastGameId="",socket=null,lastMessageAt=0,connected=false;
+let agents=[],price=1,history=[],tick=0,active=false,botRunning=false,trades=[],market=[],rounds=[],lastState=null,lastGameId="",socket=null,lastMessageAt=0,connected=false,connectWatchdog=null;
 const finite=(v,d=NaN)=>Number.isFinite(Number(v))?Number(v):d;
 function safeSave(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify({market:market.slice(-5000),rounds:rounds.slice(-300),trades:trades.slice(0,300)}));}catch(e){setDataStatus("Хранилище браузера заполнено");}}
 function restore(){try{const x=JSON.parse(localStorage.getItem(STORAGE_KEY)||"{}");market=Array.isArray(x.market)?x.market:[];rounds=Array.isArray(x.rounds)?x.rounds:[];trades=Array.isArray(x.trades)?x.trades:[];}catch(e){market=[];rounds=[];trades=[];}}
@@ -20,7 +20,7 @@ function connect(){
  socket=window.io("https://backend.rugs.fun?frontend-version=1.0",{transports:["websocket","polling"],timeout:10000,reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:1500,reconnectionDelayMax:10000});
  socket.on("connect",()=>{connected=true;setConnection("Подключено","ожидаем поток игры");});
  socket.on("disconnect",reason=>{connected=false;setConnection("Отключено",reason);});
- socket.on("connect_error",err=>{connected=false;setConnection("Ошибка",err.message||"соединение");});
+ socket.on("connect_error",err=>{connected=false;if(connectWatchdog)clearTimeout(connectWatchdog);setConnection("Ошибка",err.message||"handshake отклонён");});\n socket.io.on("error",err=>{connected=false;setConnection("Ошибка",String(err?.message||err||"ошибка транспорта"));});\n socket.io.on("reconnect_attempt",n=>setConnection("Повтор подключения","попытка "+n));\n socket.io.on("reconnect_error",err=>setConnection("Ошибка повтора",err?.message||"ошибка"));
  socket.on("gameStateUpdate",onGameState);
  socket.on("gameEnd",onGameEnd);
  socket.on("sideBetUpdate",data=>recordEvent("sideBetUpdate",data));
@@ -95,6 +95,6 @@ $("resetBtn").addEventListener("click",()=>{botRunning=false;$("startBtn").textC
 $("exportMarket").addEventListener("click",()=>download("rugs-market-events.json",JSON.stringify(market,null,2),"application/json"));
 $("exportTrades").addEventListener("click",()=>{const rows=[["time","agent","side","price","amount","pnl","gameId","tick"],...trades.map(t=>[new Date(t.time).toISOString(),t.name,t.side,t.price,t.amount,t.pnl,t.gameId,t.tick])];download("rugs-paper-trades.csv",rows.map(r=>r.map(v=>'"'+String(v??"").replaceAll('"','""')+'"').join(",")).join("\n"),"text/csv;charset=utf-8");});
 window.addEventListener("resize",draw);
-setInterval(()=>{if(connected&&lastMessageAt&&Date.now()-lastMessageAt>15000)setConnection("Подключено","нет игровых обновлений >15с");},5000);
+setInterval(()=>{if(connected&&lastMessageAt&&Date.now()-lastMessageAt>15000)setConnection("Подключено, но нет данных","последнее событие более 15 секунд назад");else if(connected&&!lastMessageAt)setConnection("Подключено","ждём первое gameStateUpdate");},5000);
 init();connect();
 })();
