@@ -43,11 +43,10 @@ function connect(){
   socket=window.io("https://backend.rugs.fun",options);
   watchdog=setTimeout(()=>{if(!connected)setConnection("Нет соединения","handshake не завершён за 20 секунд; см. диагностику");},22000);
   socket.on("connect",()=>{
-   connected=true;if(watchdog)clearTimeout(watchdog);
+   connected=true;if(watchdog)clearTimeout(watchdog);if(fallbackTimer)clearTimeout(fallbackTimer);
    const transport=socket.io?.engine?.transport?.name||"неизвестно";
    setConnection("Подключено","Socket.IO · "+transport);
    if(socket.io?.engine)socket.io.engine.on("upgrade",()=>setConnection("Подключено","Socket.IO · websocket"));
-   lastUpdateAt=Date.now();
    $("lastUpdate").textContent="Канал установлен; ожидаем игровые события";
   });
   socket.onAny((event,...args)=>{
