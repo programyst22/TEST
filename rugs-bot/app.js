@@ -17,11 +17,11 @@ function setConnection(status,detail=""){const el=$("connectionStatus");if(!el)r
 function connect(){
  if(!window.io){setConnection("Ошибка","Socket.IO не загрузился");return;}
  setConnection("Подключение","проверяем сервер");
- socket=window.io("https://backend.rugs.fun?frontend-version=1.0",{transports:["polling","websocket"],timeout:8000,upgrade:true,reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:2000,reconnectionDelayMax:15000});
+ socket=window.io("https://backend.rugs.fun?frontend-version=1.0",{transports:["websocket","polling"],tryAllTransports:true,timeout:8000,upgrade:true,reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:2000,reconnectionDelayMax:15000});
  connectWatchdog=setTimeout(()=>{if(!connected)setConnection("Нет соединения","сервер не ответил за 12 секунд");},12000);
  socket.on("connect",()=>{connected=true;if(connectWatchdog)clearTimeout(connectWatchdog);const transport=socket.io?.engine?.transport?.name||"неизвестно";setConnection("Подключено","канал: "+transport);if(socket.io?.engine)socket.io.engine.on("upgrade",()=>setConnection("Подключено","канал: websocket"));});
  socket.on("disconnect",reason=>{connected=false;setConnection("Отключено",reason);});
- socket.on("connect_error",err=>{connected=false;if(connectWatchdog)clearTimeout(connectWatchdog);setConnection("Ошибка",err.message||"handshake отклонён");});
+ socket.on("connect_error",err=>{connected=false;if(connectWatchdog)clearTimeout(connectWatchdog);setConnection("Ошибка",(err.message||"handshake отклонён")+(err.description?" · "+String(err.description):""));});
  socket.io.on("error",err=>{connected=false;setConnection("Ошибка",String(err?.message||err||"ошибка транспорта"));});
  socket.io.on("reconnect_attempt",n=>setConnection("Повтор подключения","попытка "+n));
  socket.io.on("reconnect_error",err=>setConnection("Ошибка повтора",err?.message||"ошибка"));
