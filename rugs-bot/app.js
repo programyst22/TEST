@@ -28,7 +28,7 @@ function connect(){
   setConnection("Подключение",withVersion?"повтор с frontend-version":"Socket.IO polling handshake");
   const options={
    path:"/socket.io/",
-   transports:["polling","websocket"],
+   transports:["polling"],
    timeout:20000,
    reconnection:true,
    reconnectionAttempts:Infinity,
@@ -36,7 +36,7 @@ function connect(){
    reconnectionDelayMax:15000,
    randomizationFactor:0.5,
    forceNew:true,
-   upgrade:true,
+   upgrade:false,
    rememberUpgrade:false,
    ...(withVersion?{query:{"frontend-version":"1.0"}}:{})
   };
@@ -46,7 +46,6 @@ function connect(){
    connected=true;if(watchdog)clearTimeout(watchdog);if(fallbackTimer)clearTimeout(fallbackTimer);
    const transport=socket.io?.engine?.transport?.name||"неизвестно";
    setConnection("Подключено","Socket.IO · "+transport);
-   if(socket.io?.engine)socket.io.engine.on("upgrade",()=>setConnection("Подключено","Socket.IO · websocket"));
    $("lastUpdate").textContent="Канал установлен; ожидаем игровые события";
   });
   socket.onAny((event,...args)=>{
