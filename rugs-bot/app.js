@@ -20,15 +20,15 @@ function connectionErrorText(err){
 }
 function connect(){
  if(!window.io){setConnection("Ошибка","Socket.IO CDN не загрузился; проверьте сеть/блокировщик");return;}
- let attempt=0, watchdog=null, fallbackTimer=null;
- const closeCurrent=()=>{if(watchdog)clearTimeout(watchdog);if(fallbackTimer)clearTimeout(fallbackTimer);if(socket){socket.removeAllListeners();socket.disconnect();socket=null;}};
- const openConnection=withVersion=>{
+ let watchdog=null;
+ const closeCurrent=()=>{if(watchdog)clearTimeout(watchdog);if(socket){socket.removeAllListeners();socket.disconnect();socket=null;}};
+ const openConnection=()=>{
   closeCurrent();
   connected=false;
-  setConnection("Подключение",withVersion?"повтор с frontend-version":"Socket.IO polling handshake");
+  setConnection("Подключение","Socket.IO · WebSocket first");
   const options={
    path:"/socket.io/",
-   transports:["polling"],
+   transports:["websocket","polling"],
    timeout:20000,
    reconnection:true,
    reconnectionAttempts:Infinity,
@@ -36,14 +36,13 @@ function connect(){
    reconnectionDelayMax:15000,
    randomizationFactor:0.5,
    forceNew:true,
-   upgrade:false,
+   upgrade:true,
    rememberUpgrade:false,
-   ...(withVersion?{query:{"frontend-version":"1.0"}}:{})
   };
-  socket=window.io("https://backend.rugs.fun",options);
+  socket=window.io("https://backend.rugs.fun?frontend-version=1.0",options);
   watchdog=setTimeout(()=>{if(!connected)setConnection("Нет соединения","handshake не завершён за 20 секунд; см. диагностику");},22000);
   socket.on("connect",()=>{
-   connected=true;if(watchdog)clearTimeout(watchdog);if(fallbackTimer)clearTimeout(fallbackTimer);
+   connected=true;if(watchdog)clearTimeout(watchdog);
    const transport=socket.io?.engine?.transport?.name||"неизвестно";
    setConnection("Подключено","Socket.IO · "+transport);
    $("lastUpdate").textContent="Канал установлен; ожидаем игровые события";
@@ -61,10 +60,6 @@ function connect(){
    const detail=connectionErrorText(err);
    setConnection("Ошибка",detail);
    $("lastUpdate").textContent="Ошибка соединения до получения игровых данных";
-   if(!withVersion&&attempt===0){
-    attempt=1;
-    fallbackTimer=setTimeout(()=>openConnection(true),1800);
-   }
   });
   socket.on("gameStateUpdate",onGameState);
   socket.on("gameEnd",onGameEnd);
@@ -78,7 +73,7 @@ function connect(){
    if(engine)engine.on("connection_error",err=>setConnection("Ошибка handshake",connectionErrorText(err)));
   });
  };
- openConnection(false);
+ openConnection();
 }
 function recordEvent(type,data){market.push({type,receivedAt:Date.now(),gameId:lastGameId,tick,price,payload:data??null});if(market.length>5000)market.shift();safeSave();renderStats();}
 function onGameState(raw){
