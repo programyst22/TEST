@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#10131b">
+<title>Rugs Paper Bot — тестовый режим</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div><div class="eyebrow">PAPER TRADING · SIMULATION ONLY</div><h1>Rugs <span>Paper Bot</span></h1></div>
+  <div class="status"><i></i> Только виртуальные монеты</div>
+</header>
+<main>
+  <section class="hero panel">
+    <div><div class="eyebrow">ОБЩИЙ БАЛАНС</div><div class="balance" id="totalBalance">100.00 <small>COINS</small></div><p class="muted">10 агентов · каждому выделено 10 виртуальных монет</p></div>
+    <div class="priceBox"><div class="eyebrow">СИМУЛИРУЕМАЯ ЦЕНА</div><div class="price" id="price">1.0000</div><div class="muted" id="priceChange">Ожидание запуска</div></div>
+  </section>
+  <section class="controls panel">
+    <div><h2>Управление</h2><p class="muted">Бот меняет цену и совершает учебные сделки внутри этой страницы.</p></div>
+    <div class="buttons"><button id="startBtn" class="primary">Запустить симуляцию</button><button id="stepBtn">Один шаг</button><button id="resetBtn" class="danger">Сбросить</button></div>
+  </section>
+  <section class="panel">
+    <div class="sectionHead"><h2>Динамика цены</h2><span class="muted" id="tick">Тик #0</span></div>
+    <div class="chartWrap"><canvas id="chart" height="170"></canvas></div>
+  </section>
+  <section class="panel">
+    <div class="sectionHead"><h2>AI-агенты</h2><span class="muted">Виртуальные портфели</span></div>
+    <div class="agents" id="agents"></div>
+  </section>
+  <section class="panel">
+    <div class="sectionHead"><h2>Последние сделки</h2><span class="muted">Журнал симуляции</span></div>
+    <div class="tableWrap"><table><thead><tr><th>Время</th><th>Агент</th><th>Действие</th><th>Цена</th><th>Сумма</th></tr></thead><tbody id="trades"><tr><td colspan="5" class="muted">Сделок пока нет</td></tr></tbody></table></div>
+  </section>
+  <p class="disclaimer">Важно: это локальная учебная симуляция. Она не подключается к rugs.fun, не использует кошелёк, не отправляет транзакции и не гарантирует прибыль. Не вводите seed-фразу или приватные ключи.</p>
+</main>
+<script src="app.js"></script>
+</body></html>
