@@ -14,21 +14,73 @@ function setDataStatus(s){const el=$("dataStatus");if(el)el.textContent=s;}
 function initAgents(){agents=NAMES.map((name,i)=>({name,cash:START,units:0,entryCost:0,entryPrice:0,realized:0,closed:0,wins:0,action:"Ожидание",lastTradeTick:-1}));}
 function init(){restore();initAgents();history=[];tick=0;price=1;render();draw();renderStats();}
 function setConnection(status,detail=""){const el=$("connectionStatus");if(!el)return;el.textContent=detail?status+" · "+detail:status;el.className="connection "+(status==="Подключено"?"online":status==="Ошибка"?"offline":"pending");}
+function connectionErrorText(err){
+ const parts=[err?.message,err?.type,err?.description,err?.context?.name,err?.context?.transport?("transport="+err.context.transport):"",err?.context?.previousTransport?("previous="+err.context.previousTransport):"",err?.data?.message].filter(Boolean);
+ return parts.join(" · ").slice(0,220)||"Неизвестная ошибка handshake";
+}
 function connect(){
- if(!window.io){setConnection("Ошибка","Socket.IO не загрузился");return;}
- setConnection("Подключение","проверяем сервер");
- socket=window.io("https://backend.rugs.fun?frontend-version=1.0",{transports:["websocket","polling"],tryAllTransports:true,timeout:8000,upgrade:true,reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:2000,reconnectionDelayMax:15000});
- connectWatchdog=setTimeout(()=>{if(!connected)setConnection("Нет соединения","сервер не ответил за 12 секунд");},12000);
- socket.on("connect",()=>{connected=true;if(connectWatchdog)clearTimeout(connectWatchdog);const transport=socket.io?.engine?.transport?.name||"неизвестно";setConnection("Подключено","канал: "+transport);if(socket.io?.engine)socket.io.engine.on("upgrade",()=>setConnection("Подключено","канал: websocket"));});
- socket.on("disconnect",reason=>{connected=false;setConnection("Отключено",reason);});
- socket.on("connect_error",err=>{connected=false;if(connectWatchdog)clearTimeout(connectWatchdog);setConnection("Ошибка",(err.message||"handshake отклонён")+(err.description?" · "+String(err.description):""));});
- socket.io.on("error",err=>{connected=false;setConnection("Ошибка",String(err?.message||err||"ошибка транспорта"));});
- socket.io.on("reconnect_attempt",n=>setConnection("Повтор подключения","попытка "+n));
- socket.io.on("reconnect_error",err=>setConnection("Ошибка повтора",err?.message||"ошибка"));
- socket.on("gameStateUpdate",onGameState);
- socket.on("gameEnd",onGameEnd);
- socket.on("sideBetUpdate",data=>recordEvent("sideBetUpdate",data));
- socket.on("newTrade",data=>recordEvent("newTrade",data));
+ if(!window.io){setConnection("Ошибка","Socket.IO CDN не загрузился; проверьте сеть/блокировщик");return;}
+ let attempt=0, watchdog=null, fallbackTimer=null;
+ const closeCurrent=()=>{if(watchdog)clearTimeout(watchdog);if(fallbackTimer)clearTimeout(fallbackTimer);if(socket){socket.removeAllListeners();socket.disconnect();socket=null;}};
+ const openConnection=withVersion=>{
+  closeCurrent();
+  connected=false;
+  setConnection("Подключение",withVersion?"повтор с frontend-version":"Socket.IO polling handshake");
+  const options={
+   path:"/socket.io/",
+   transports:["polling","websocket"],
+   timeout:20000,
+   reconnection:true,
+   reconnectionAttempts:Infinity,
+   reconnectionDelay:2000,
+   reconnectionDelayMax:15000,
+   randomizationFactor:0.5,
+   forceNew:true,
+   upgrade:true,
+   rememberUpgrade:false,
+   ...(withVersion?{query:{"frontend-version":"1.0"}}:{})
+  };
+  socket=window.io("https://backend.rugs.fun",options);
+  watchdog=setTimeout(()=>{if(!connected)setConnection("Нет соединения","handshake не завершён за 20 секунд; см. диагностику");},22000);
+  socket.on("connect",()=>{
+   connected=true;if(watchdog)clearTimeout(watchdog);
+   const transport=socket.io?.engine?.transport?.name||"неизвестно";
+   setConnection("Подключено","Socket.IO · "+transport);
+   if(socket.io?.engine)socket.io.engine.on("upgrade",()=>setConnection("Подключено","Socket.IO · websocket"));
+   lastUpdateAt=Date.now();
+   $("lastUpdate").textContent="Канал установлен; ожидаем игровые события";
+  });
+  socket.onAny((event,...args)=>{
+   const when=new Date().toLocaleTimeString("ru-RU");
+   const summary=Array.isArray(args)&&args[0]&&typeof args[0]==="object"?
+    Object.keys(args[0]).slice(0,7).join(", "):typeof args[0];
+   $("roundMeta").textContent="Последнее событие: "+event+(summary?" · поля: "+summary:"")+" · "+when;
+   if(event!=="gameStateUpdate"&&event!=="newTrade"&&event!=="gameEnd")recordEvent("server:"+event,{keys:summary});
+  });
+  socket.on("disconnect",reason=>{connected=false;setConnection("Отключено",String(reason||"соединение закрыто"));});
+  socket.on("connect_error",err=>{
+   connected=false;
+   const detail=connectionErrorText(err);
+   setConnection("Ошибка",detail);
+   $("lastUpdate").textContent="Ошибка соединения до получения игровых данных";
+   if(!withVersion&&attempt===0){
+    attempt=1;
+    fallbackTimer=setTimeout(()=>openConnection(true),1800);
+   }
+  });
+  socket.on("gameStateUpdate",onGameState);
+  socket.on("gameEnd",onGameEnd);
+  socket.on("sideBetUpdate",data=>recordEvent("sideBetUpdate",data));
+  socket.on("newTrade",data=>recordEvent("newTrade",data));
+  socket.io.on("reconnect_attempt",n=>setConnection("Повтор подключения","попытка "+n));
+  socket.io.on("reconnect_error",err=>setConnection("Ошибка повтора",connectionErrorText(err)));
+  socket.io.on("error",err=>setConnection("Ошибка транспорта",connectionErrorText(err)));
+  socket.io.on("open",()=>{
+   const engine=socket?.io?.engine;
+   if(engine)engine.on("connection_error",err=>setConnection("Ошибка handshake",connectionErrorText(err)));
+  });
+ };
+ openConnection(false);
 }
 function recordEvent(type,data){market.push({type,receivedAt:Date.now(),gameId:lastGameId,tick,price,payload:data??null});if(market.length>5000)market.shift();safeSave();renderStats();}
 function onGameState(raw){
