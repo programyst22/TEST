@@ -16,11 +16,15 @@ function init(){restore();initAgents();history=[];tick=0;price=1;render();draw()
 function setConnection(status,detail=""){const el=$("connectionStatus");if(!el)return;el.textContent=detail?status+" · "+detail:status;el.className="connection "+(status==="Подключено"?"online":status==="Ошибка"?"offline":"pending");}
 function connect(){
  if(!window.io){setConnection("Ошибка","Socket.IO не загрузился");return;}
- setConnection("Подключение","backend.rugs.fun");
- socket=window.io("https://backend.rugs.fun?frontend-version=1.0",{transports:["websocket","polling"],timeout:10000,reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:1500,reconnectionDelayMax:10000});
- socket.on("connect",()=>{connected=true;setConnection("Подключено","ожидаем поток игры");});
+ setConnection("Подключение","проверяем сервер");
+ socket=window.io("https://backend.rugs.fun?frontend-version=1.0",{transports:["polling","websocket"],timeout:8000,upgrade:true,reconnection:true,reconnectionAttempts:Infinity,reconnectionDelay:2000,reconnectionDelayMax:15000});
+ connectWatchdog=setTimeout(()=>{if(!connected)setConnection("Нет соединения","сервер не ответил за 12 секунд");},12000);
+ socket.on("connect",()=>{connected=true;if(connectWatchdog)clearTimeout(connectWatchdog);const transport=socket.io?.engine?.transport?.name||"неизвестно";setConnection("Подключено","канал: "+transport);if(socket.io?.engine)socket.io.engine.on("upgrade",()=>setConnection("Подключено","канал: websocket"));});
  socket.on("disconnect",reason=>{connected=false;setConnection("Отключено",reason);});
- socket.on("connect_error",err=>{connected=false;if(connectWatchdog)clearTimeout(connectWatchdog);setConnection("Ошибка",err.message||"handshake отклонён");});\n socket.io.on("error",err=>{connected=false;setConnection("Ошибка",String(err?.message||err||"ошибка транспорта"));});\n socket.io.on("reconnect_attempt",n=>setConnection("Повтор подключения","попытка "+n));\n socket.io.on("reconnect_error",err=>setConnection("Ошибка повтора",err?.message||"ошибка"));
+ socket.on("connect_error",err=>{connected=false;if(connectWatchdog)clearTimeout(connectWatchdog);setConnection("Ошибка",err.message||"handshake отклонён");});
+ socket.io.on("error",err=>{connected=false;setConnection("Ошибка",String(err?.message||err||"ошибка транспорта"));});
+ socket.io.on("reconnect_attempt",n=>setConnection("Повтор подключения","попытка "+n));
+ socket.io.on("reconnect_error",err=>setConnection("Ошибка повтора",err?.message||"ошибка"));
  socket.on("gameStateUpdate",onGameState);
  socket.on("gameEnd",onGameEnd);
  socket.on("sideBetUpdate",data=>recordEvent("sideBetUpdate",data));
