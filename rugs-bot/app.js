@@ -58,7 +58,27 @@ function connect(){
    rememberUpgrade:false
   };
   socket=window.io("https://backend.rugs.fun?frontend-version=1.0",options);
-  watchdog=setTimeout(()=>{if(!connected)setConnection("Нет соединения","handshake не завершён за 20 секунд");},22000);
+  watchdog=setTimeout(()=>{
+   if(connected)return;
+   if(!pollingFallbackUsed && socket?.io?.opts?.transports?.[0]==="websocket"){
+    pollingFallbackUsed=true;
+    const online=navigator.onLine?"браузер онлайн":"браузер офлайн";
+    setConnection("Переключение транспорта","WebSocket завис без ответа; принудительно пробуем polling · "+online);
+    socket.io.opts.transports=["polling","websocket"];
+    socket.connect();
+    watchdog=setTimeout(()=>{
+     if(!connected){
+      const engine=socket?.io?.engine;
+      const transport=engine?.transport?.name||"не создан";
+      const ready=engine?.readyState||"неизвестно";
+      setConnection("Нет соединения","polling и WebSocket не завершили handshake · "+online+" · transport="+transport+" · state="+ready+" · origin="+location.origin);
+     }
+    },20000);
+    return;
+   }
+   const engine=socket?.io?.engine;
+   setConnection("Нет соединения","handshake timeout · "+(navigator.onLine?"браузер онлайн":"браузер офлайн")+" · transport="+(engine?.transport?.name||"не создан")+" · state="+(engine?.readyState||"неизвестно")+" · origin="+location.origin);
+  },12000);
   socket.on("connect",()=>{
    connected=true;if(watchdog)clearTimeout(watchdog);
    const transport=socket.io?.engine?.transport?.name||"неизвестно";
