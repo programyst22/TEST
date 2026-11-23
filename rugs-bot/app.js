@@ -15,16 +15,34 @@ function initAgents(){agents=NAMES.map((name,i)=>({name,cash:START,units:0,entry
 function init(){restore();initAgents();history=[];tick=0;price=1;render();draw();renderStats();}
 function setConnection(status,detail=""){const el=$("connectionStatus");if(!el)return;el.textContent=detail?status+" · "+detail:status;el.className="connection "+(status==="Подключено"?"online":status==="Ошибка"?"offline":"pending");}
 function connectionErrorText(err){
- const parts=[err?.message,err?.type,err?.description,err?.context?.name,err?.context?.transport?("transport="+err.context.transport):"",err?.context?.previousTransport?("previous="+err.context.previousTransport):"",err?.data?.message].filter(Boolean);
- return parts.join(" · ").slice(0,220)||"Неизвестная ошибка handshake";
+ const ctx=err?.context||err?.cause||{};
+ const target=ctx?.target||ctx?.currentTarget||{};
+ const parts=[
+  err?.message,
+  err?.type,
+  err?.description,
+  ctx?.name,
+  ctx?.type,
+  ctx?.message,
+  ctx?.status?"HTTP "+ctx.status:"",
+  ctx?.statusText,
+  target?.url?"url="+target.url:"",
+  target?.readyState!==undefined?"readyState="+target.readyState:"",
+  target?.status?"status="+target.status:"",
+  target?.statusText,
+  target?.responseText?String(target.responseText).slice(0,160):"",
+  err?.data?.message
+ ].filter(Boolean);
+ return parts.join(" · ").slice(0,320)||String(err)||"Неизвестная ошибка соединения";
 }
 function connect(){
  if(!window.io){setConnection("Ошибка","Socket.IO CDN не загрузился; проверьте сеть/блокировщик");return;}
- let watchdog=null;
+ let watchdog=null, pollingFallbackUsed=false;
  const closeCurrent=()=>{if(watchdog)clearTimeout(watchdog);if(socket){socket.removeAllListeners();socket.disconnect();socket=null;}};
  const openConnection=()=>{
   closeCurrent();
   connected=false;
+  pollingFallbackUsed=false;
   setConnection("Подключение","Socket.IO · WebSocket first");
   const options={
    path:"/socket.io/",
@@ -37,10 +55,10 @@ function connect(){
    randomizationFactor:0.5,
    forceNew:true,
    upgrade:true,
-   rememberUpgrade:false,
+   rememberUpgrade:false
   };
   socket=window.io("https://backend.rugs.fun?frontend-version=1.0",options);
-  watchdog=setTimeout(()=>{if(!connected)setConnection("Нет соединения","handshake не завершён за 20 секунд; см. диагностику");},22000);
+  watchdog=setTimeout(()=>{if(!connected)setConnection("Нет соединения","handshake не завершён за 20 секунд");},22000);
   socket.on("connect",()=>{
    connected=true;if(watchdog)clearTimeout(watchdog);
    const transport=socket.io?.engine?.transport?.name||"неизвестно";
@@ -49,17 +67,27 @@ function connect(){
   });
   socket.onAny((event,...args)=>{
    const when=new Date().toLocaleTimeString("ru-RU");
-   const summary=Array.isArray(args)&&args[0]&&typeof args[0]==="object"?
-    Object.keys(args[0]).slice(0,7).join(", "):typeof args[0];
+   const summary=Array.isArray(args)&&args[0]&&typeof args[0]==="object"?Object.keys(args[0]).slice(0,7).join(", "):typeof args[0];
    $("roundMeta").textContent="Последнее событие: "+event+(summary?" · поля: "+summary:"")+" · "+when;
    if(event!=="gameStateUpdate"&&event!=="newTrade"&&event!=="gameEnd")recordEvent("server:"+event,{keys:summary});
   });
-  socket.on("disconnect",reason=>{connected=false;setConnection("Отключено",String(reason||"соединение закрыто"));});
+  socket.on("disconnect",(reason,details)=>{
+   connected=false;
+   const detail=[reason,details?.message,details?.description].filter(Boolean).join(" · ");
+   setConnection("Отключено",detail||"соединение закрыто");
+  });
   socket.on("connect_error",err=>{
    connected=false;
    const detail=connectionErrorText(err);
-   setConnection("Ошибка",detail);
-   $("lastUpdate").textContent="Ошибка соединения до получения игровых данных";
+   if(!pollingFallbackUsed && socket?.io?.opts?.transports?.[0]==="websocket"){
+    pollingFallbackUsed=true;
+    socket.io.opts.transports=["polling","websocket"];
+    setConnection("Переключение транспорта","WebSocket отказал; пробуем polling · "+detail);
+    socket.connect();
+    return;
+   }
+   setConnection("Ошибка подключения",detail);
+   $("lastUpdate").textContent="Handshake не выполнен; игровые данные ещё не поступают";
   });
   socket.on("gameStateUpdate",onGameState);
   socket.on("gameEnd",onGameEnd);
